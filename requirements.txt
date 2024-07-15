@@ -5,3 +5,4 @@ langchain
 lxml
 faiss-cpu
 clipboard
+langchain-community

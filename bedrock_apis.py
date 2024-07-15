@@ -79,7 +79,7 @@ def getXMLPromptTemplate(sl,tl,text2translate,custom_example_xml,example_xml):
     prompt="""
     <prompt>
     <system_instructions>
-        You are an expert language translator assistant. You will be given text in one language, and you need to translate it into another language. You should maintain the same tone, style, and meaning as the original text in your translation.
+        You are an expert language translator assistant. You will be given text in one language, and you need to translate it into another language.
     </system_instructions>
 
 
@@ -102,35 +102,8 @@ def getXMLPromptTemplate(sl,tl,text2translate,custom_example_xml,example_xml):
         %(custom_example_xml)s
     </examples>
 
-
-    <translation_rules>
-        <rule>
-        <description>Translate product names literally</description>
-        <data_map>
-            <item>
-            <source>language</source>
-            <target>bhasha</target>
-            </item>
-        </data_map>
-        </rule>
-        <rule>
-        <description>Translate company names literally</description>
-        <data_map>
-            <item>
-            <source>MIS</source>
-            <target>Ratings</target>
-            </item>
-            <item>
-            <source>Moodys Investment Services</source>
-            <target>Moodys Ratings</target>
-            </item>
-        </data_map>
-        </rule>
-    </translation_rules>
-
-
     <instructions>
-        Translate the text in the input_text tag from SOURCE_LANGUAGE to TARGET_LANGUAGE. Use the examples provided in examples tag and apply matching examples to influence the translation output. Output only the exact translation.
+        Translate the text in the input_text tag from SOURCE_LANGUAGE to TARGET_LANGUAGE. Use the examples provided in examples tag to guide the style, tone and vocabulary of the translated text. Always ensure the tranlation remains accurate to the initial meaning of the source text.
     </instructions>
     </prompt>
     """

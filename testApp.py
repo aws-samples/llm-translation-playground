@@ -11,6 +11,7 @@ import pandas as pd
 from lxml import etree
 import clipboard
 from botocore.exceptions import ClientError
+from sacrebleu.metrics import BLEU
 
 from bedrock_apis import (
     invokeLLM,
@@ -33,9 +34,13 @@ LAN_CHOICES = {"EN": "English", "FR": "French", "ES": "Spanish", "DE": "German",
 #Translator Model Choices
 MODEL_CHOICES = {"anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet", "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku", "mistral.mistral-large-2402-v1:0": "Mistral", "cohere.embed-multilingual-v3": "Cohere"}
 
-def on_copy_click(text):
+bleu = BLEU()
+
+def on_copy_click():
     # st.session_state.copied.append(text)
-    clipboard.copy(text)
+    if 'translated_text' in st.session_state:
+      text = st.session_state['translated_text']
+      clipboard.copy(text)
 
 def populateExamplesXml(examplesRootElement): 
   if 'examples' in st.session_state :
@@ -137,6 +142,14 @@ def generateExamplesXML():
   return examplesRootElement
 
 
+def on_evaluate_click():
+  print("Running Evaluation")
+  st.session_state['translated_text']
+  if 'translated_text' in st.session_state and 'reference_text' in st.session_state:
+    sys = st.session_state['translated_text'].split(".")
+    refs = [st.session_state['reference_text'].split(".")]
+    result = bleu.corpus_score(sys, refs)
+    print(result)
 
 st.title("Language Translator with LLMs")
 text2translate=st.text_area("Text To translate")
@@ -159,37 +172,34 @@ with st.expander("Translation Choices",True):
       return MODEL_CHOICES[option]
   model_id=st.selectbox("Select LLM models from Amazon Bedrock",options=list(MODEL_CHOICES.keys()), format_func=format_func)
 
-with st.expander("Explore the model"):
-  llm_q=st.text_area("What you want to know?")
-  st.session_state.llm_q=llm_q
-  if st.button(MODEL_CHOICES[model_id]+" at Your Service"):
-      response = invokeLLM(llm_q,model_id)
-      result = json.loads(response.get("body").read())
-      output_list = result.get("content", [])
-      st.write(output_list[0]["text"])
+#with st.expander("Explore the model"):
+#  llm_q=st.text_area("What you want to know?")
+#  st.session_state.llm_q=llm_q
+# if st.button(MODEL_CHOICES[model_id]+" at Your Service"):
+#      response = invokeLLM(llm_q,model_id)
+#      result = json.loads(response.get("body").read())
+#      output_list = result.get("content", [])
+#      st.write(output_list[0]["text"])
 
 
 
-with st.expander("Translation memory influence options "):
-  #TMX Examples Files
-  filename = st.file_uploader("Upload a TMX file", type=["tmx"])
-  st.write('You selected `%s`' % filename)
-
-  #Embedding Model Choices
-  EMBED_CHOICES = {"amazon.titan-embed-text-v2:0": "Titan Embedding Text v2", "cohere.embed-multilingual-v3": "Cohere Multilingual", "cohere.embed-english-v3": "Cohere English"}
-
-  def format_func(option):
-      return EMBED_CHOICES[option]
-
-  embedding_id=st.selectbox("Select embedding models from Amazon Bedrock",options=list(EMBED_CHOICES.keys()), format_func=format_func)
-
-
-
-
-  session_state = st.session_state
-  examples= []
+with st.expander("Translation customization"):
   egcol1, egcol2 = st.columns(2)
-  with egcol2:  
+  with egcol1:
+  #TMX Examples Files
+    filename = st.file_uploader("Upload a TMX file", type=["tmx"])
+    st.write('You selected `%s`' % filename)
+
+    #Embedding Model Choices
+    EMBED_CHOICES = {"amazon.titan-embed-text-v2:0": "Titan Embedding Text v2", "cohere.embed-multilingual-v3": "Cohere Multilingual", "cohere.embed-english-v3": "Cohere English"}
+
+    def format_func(option):
+        return EMBED_CHOICES[option]
+
+    embedding_id=st.selectbox("Select embedding models from Amazon Bedrock",options=list(EMBED_CHOICES.keys()), format_func=format_func)
+
+    session_state = st.session_state
+    examples= []
     if st.button("Process TMX File"):
       documents=processTMXFile(filename)
       tmx_db = loadEmbeddings(documents)
@@ -197,21 +207,12 @@ with st.expander("Translation memory influence options "):
       rule_language_lookup=populateRuleLanguageLookup(documents)
       st.session_state.rule_language_lookup = rule_language_lookup
       loadRules(sl,tl)
-        
-  with egcol1:
-      st.text("")
 
+with egcol2:
   #if st.button("Collect Matching Rules"):
   #    loadRules(sl,tl)
-        
-
-
-
-
-with st.expander("Bring your own example to influence "):
   custom_examples=st.text_area("Custom Examples: "+ LAN_CHOICES[sl] + " : " +LAN_CHOICES[tl] +"\n")
-  st.write("One example pair per line seperated by colon (:). Examples below")
-  st.write("Hello, how are you? : Hola, ¿cómo estás?")
+  st.write("One example pair per line seperated by colon (:). Example: Hello, how are you? : Hola, ¿cómo estás?")
 
 df=None
 if 'tmx_db' in st.session_state :
@@ -222,14 +223,13 @@ with st.expander("Exmples for RAG",expanded=True):
     if df is not None :
       st.markdown(df.to_html(escape=False), unsafe_allow_html=True)
       st.write(" ")
- 
 
 if st.button("Translate"):
-  
+ 
   examplesXml=generateExamplesXML()
   #prompt = getPromptXml(sl,tl,text2translate,custom_example_xml,example_xml)
   prompt = getPromptXml2(LAN_CHOICES[sl],LAN_CHOICES[tl],text2translate,examplesXml)
-  with st.expander("LLM prompt"):
+  with st.expander("Generated Prompt"):
      st.text_area("Prompt",prompt)
   response=invokeLLM(prompt,model_id)
 
@@ -251,17 +251,26 @@ if st.button("Translate"):
   for output in output_list:
       print(output["text"])
 
-  translated2Text = {    
+  translated2Text = {
               output_list[0]["text"]
           }
+  st.session_state['translated_text'] = output_list[0]["text"]
+
+
+with st.expander("Evaluation" ,expanded=True) :
+  egcol1, egcol2 = st.columns(2)
+  with egcol1:
+     st.write("Reference- Paste your reference " +LAN_CHOICES[tl] +" translation  below")
+     st.session_state['reference_text']=st.text_area()
+     #st.button("Evaluate", on_click=on_evaluate_click, args=())
+  with egcol2:
+    st.write("Translation")
+    if 'translated_text' in st.session_state:
+      st.write(st.session_state['translated_text'])
+      st.button("📋", on_click=on_copy_click, args=())
   
-  with st.expander("In "+LAN_CHOICES[tl] ,expanded=True) :
-    st.write(translated2Text)
-    st.button("📋", on_click=on_copy_click, args=(translated2Text,))
-
-  with st.expander("Metrics",expanded=True):
-    st.write(f"- The input length is {input_tokens} tokens.")
-    st.write(f"- The output length is {output_tokens} tokens.")
-
-
-
+  #with st.expander("Metrics",expanded=True):
+  #  st.write(f"- The input length is {input_tokens} tokens.")
+  #  st.write(f"- The output length is {output_tokens} tokens.")
+  st.button("Evaluate", on_click=on_evaluate_click, args=())
+  
