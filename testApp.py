@@ -141,6 +141,19 @@ def generateExamplesXML():
   populateExamplesXml(examplesRootElement)
   return examplesRootElement
 
+def refresh_metrics():
+   with st.sidebar:
+    st.subheader("Metrics")
+    if 'input_tokens' in st.session_state:
+      input_tokens=st.session_state['input_tokens']  
+      st.metric(label="Input Tokens", value=input_tokens)
+    if 'output_tokens' in st.session_state:
+      output_tokens=st.session_state['output_tokens']  
+      st.metric(label="Input Tokens", value=output_tokens)
+    if 'bleu' in st.session_state:
+      bleu = st.session_state['bleu']
+      if 'delta' in st.session_state['bleu']: st.metric(label="Translation score", value=str(round(bleu['score'], 2)), delta=str(round(bleu['delta'], 2)))
+      else: st.metric(label="Translation score", value=str(round(bleu['score'], 2)))
 
 def on_evaluate_click():
   print("Running Evaluation")
@@ -149,7 +162,16 @@ def on_evaluate_click():
     sys = st.session_state['translated_text'].split(".")
     refs = [st.session_state['reference_text'].split(".")]
     result = bleu.corpus_score(sys, refs)
-    print(result)
+    delta = None
+    if 'bleu' in st.session_state:
+       previous = st.session_state['bleu']['score']
+       delta = result.score - previous
+       st.session_state['bleu']['delta']=delta
+    else:
+       st.session_state['bleu'] = {}
+    st.session_state['bleu']['score']=result.score
+    refresh_metrics()
+
 
 st.title("Language Translator with LLMs")
 text2translate=st.text_area("Text To translate")
@@ -227,7 +249,6 @@ with st.expander("Exmples for RAG",expanded=True):
 if st.button("Translate"):
  
   examplesXml=generateExamplesXML()
-  #prompt = getPromptXml(sl,tl,text2translate,custom_example_xml,example_xml)
   prompt = getPromptXml2(LAN_CHOICES[sl],LAN_CHOICES[tl],text2translate,examplesXml)
   with st.expander("Generated Prompt"):
      st.text_area("Prompt",prompt)
@@ -236,14 +257,9 @@ if st.button("Translate"):
   
   # Process and print the response
   result = json.loads(response.get("body").read())
-  input_tokens = result["usage"]["input_tokens"]
-  output_tokens = result["usage"]["output_tokens"]
+  st.session_state['input_tokens'] = result["usage"]["input_tokens"]
+  st.session_state['output_tokens'] = result["usage"]["output_tokens"]
   output_list = result.get("content", [])
-
-  print("Invocation details:")
-  print(f"- The input length is {input_tokens} tokens.")
-  print(f"- The output length is {output_tokens} tokens.")
-
   print(f"- The model returned {len(output_list)} response(s):")
   for output in result.get("usage",[]):
       print(output)
@@ -255,13 +271,16 @@ if st.button("Translate"):
               output_list[0]["text"]
           }
   st.session_state['translated_text'] = output_list[0]["text"]
+  if 'bleu' in st.session_state:
+    st.session_state.pop("bleu")
+  refresh_metrics()
 
 
 with st.expander("Evaluation" ,expanded=True) :
   egcol1, egcol2 = st.columns(2)
   with egcol1:
-     st.write("Reference- Paste your reference " +LAN_CHOICES[tl] +" translation  below")
-     st.session_state['reference_text']=st.text_area()
+     st.write("Paste your reference " +LAN_CHOICES[tl] +" translation  below")
+     st.session_state['reference_text']=st.text_area('')
      #st.button("Evaluate", on_click=on_evaluate_click, args=())
   with egcol2:
     st.write("Translation")
@@ -269,8 +288,5 @@ with st.expander("Evaluation" ,expanded=True) :
       st.write(st.session_state['translated_text'])
       st.button("📋", on_click=on_copy_click, args=())
   
-  #with st.expander("Metrics",expanded=True):
-  #  st.write(f"- The input length is {input_tokens} tokens.")
-  #  st.write(f"- The output length is {output_tokens} tokens.")
   st.button("Evaluate", on_click=on_evaluate_click, args=())
   

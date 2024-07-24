@@ -6,3 +6,4 @@ lxml
 faiss-cpu
 clipboard
 langchain-community
+sacrebleu
